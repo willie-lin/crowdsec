@@ -1,0 +1,22 @@
+mode: tail
+filenames:
+- /var/log/apache2/access.log
+- /var/log/apache2/error.log
+- /var/log/apache2/other_vhosts_access.log
+labels:
+  type: apache2
+---
+mode: tail
+filenames:
+- /var/log/nginx/access.log
+- /var/log/nginx/error.log
+labels:
+  type: nginx
+---
+mode: tail
+filenames:
+- /var/log/syslog
+- /var/log/kern.log
+- /var/log/messages
+labels:
+  type: syslog

@@ -1,0 +1,14 @@
+{
+    "apache2" : [
+        "/var/log/apache2/*.log",
+        "/var/log/*httpd*.log"
+    ],
+    "nginx" : [
+        "/var/log/nginx/*.log"
+    ],
+    "syslog" : [
+        "/var/log/syslog",
+        "/var/log/kern.log",
+        "/var/log/messages"
+    ]
+}
