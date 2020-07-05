@@ -5,29 +5,27 @@ import (
 	"io/ioutil"
 	"os"
 
-	"path/filepath"
-
 	"github.com/crowdsecurity/crowdwatch/pkg/acquisition"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
-type logDetector struct {
-	Name          string
-	Files         []string
-	Detected      bool
-	ExistingFiles []string
+type serviceDetector struct {
+	logDetector map[string]*logDetector
 }
 
-type serviceDetector struct {
-	LD map[string]*logDetector
+type serviceFactory struct {
+	LogsFile      []string `json:"logs_file"`
+	HubCollection []string `json:"collections"`
 }
+
+var acquisFilePath = "./acquis.yaml"
 
 func NewServices() (*serviceDetector, error) {
 	sd := &serviceDetector{}
-	sd.LD = make(map[string]*logDetector)
+	sd.logDetector = make(map[string]*logDetector)
 
-	var unmarshallData map[string][]string
+	var unmarshallData map[string]serviceFactory
 
 	file, err := ioutil.ReadFile("./services.json")
 	if err != nil {
@@ -40,19 +38,19 @@ func NewServices() (*serviceDetector, error) {
 	}
 
 	var ld *logDetector
-	for service, logsFile := range unmarshallData {
+	for service, info := range unmarshallData {
 		ld = &logDetector{
 			Name:  service,
-			Files: logsFile,
+			Files: info.LogsFile,
 		}
-		sd.LD[service] = ld
+		sd.logDetector[service] = ld
 	}
 
 	return sd, nil
 }
 
 func (sd *serviceDetector) Detect() error {
-	for _, ld := range sd.LD {
+	for _, ld := range sd.logDetector {
 		err := ld.Detect()
 		if err != nil {
 			return err
@@ -63,7 +61,7 @@ func (sd *serviceDetector) Detect() error {
 }
 
 func (sd *serviceDetector) GenerateConfig() error {
-	f, err := os.OpenFile("./acquis.yaml", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(acquisFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -71,7 +69,7 @@ func (sd *serviceDetector) GenerateConfig() error {
 
 	yamlEncoder := yaml.NewEncoder(f)
 
-	for service, ld := range sd.LD {
+	for service, ld := range sd.logDetector {
 		acquis := &acquisition.FileCtx{
 			Mode:   "tail",
 			Labels: make(map[string]string),
@@ -94,21 +92,6 @@ func (sd *serviceDetector) GenerateConfig() error {
 		}
 
 	}
-	return nil
-}
-
-func (ld *logDetector) Detect() error {
-
-	for _, filePattern := range ld.Files {
-		matchedFiles, err := filepath.Glob(filePattern)
-		log.Debugf("pattern '%s' matched : '%v'", filePattern, matchedFiles)
-		if err != nil {
-			return err
-		}
-		if len(matchedFiles) > 0 {
-			ld.Detected = true
-			ld.ExistingFiles = append(ld.ExistingFiles, matchedFiles...)
-		}
-	}
+	log.Printf("'%s' file generated", acquisFilePath)
 	return nil
 }
