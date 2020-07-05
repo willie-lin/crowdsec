@@ -11,7 +11,8 @@ import (
 )
 
 type serviceDetector struct {
-	logDetector map[string]*logDetector
+	logDetector           map[string]*logDetector
+	collectionsDependency map[string][]string
 }
 
 type serviceFactory struct {
@@ -24,6 +25,7 @@ var acquisFilePath = "./acquis.yaml"
 func NewServices() (*serviceDetector, error) {
 	sd := &serviceDetector{}
 	sd.logDetector = make(map[string]*logDetector)
+	sd.collectionsDependency = make(map[string][]string)
 
 	var unmarshallData map[string]serviceFactory
 
@@ -44,6 +46,7 @@ func NewServices() (*serviceDetector, error) {
 			Files: info.LogsFile,
 		}
 		sd.logDetector[service] = ld
+		sd.collectionsDependency[service] = info.HubCollection
 	}
 
 	return sd, nil

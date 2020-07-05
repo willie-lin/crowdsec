@@ -24,6 +24,11 @@ var (
 		"install_blockers":      "(4) Install blocker(s)\n",
 		"uninstall_crowdsec":    "(5) Uninstall CrowdSec\n",
 	}
+
+	crowdsecConfig = map[string]string{
+		"data_dir":  "/var/lib/crowdsec/data",
+		"cscli_dir": "/etc/crowdsec/config/cscli",
+	}
 )
 
 func main() {
@@ -90,21 +95,46 @@ func main() {
 			log.Fatalf(err.Error())
 		}
 
+		if err := cwhub.UpdateHubIdx(); err != nil {
+			log.Fatalf(err.Error())
+		}
+
 		if err := cwhub.GetHubIdx(); err != nil {
-			if err := cwhub.UpdateHubIdx(); err != nil {
-				log.Fatalf(err.Error())
+			log.Fatalf(err.Error())
+		}
+
+		var defaultCollections []string
+
+		for _, collection := range sd.collectionsDependency {
+			defaultCollections = append(defaultCollections, collection...)
+		}
+
+		var allCollection []string
+		for collectionName, _ := range cwhub.HubIdx["collections"] {
+			allCollection = append(allCollection, collectionName)
+		}
+
+		var selection []string
+		prompt := &survey.MultiSelect{
+			Message:  fmt.Sprintf("Install collections from CrowdSec Hub"),
+			Options:  allCollection,
+			PageSize: 10,
+			Default:  defaultCollections,
+		}
+		survey.AskOne(prompt, &selection, survey.WithPageSize(10))
+
+		for _, collectionToInstall := range selection {
+			for collectionName, Item := range cwhub.HubIdx["collections"] {
+				if collectionName == collectionToInstall {
+					log.Printf("installing collection '%s'", collectionName)
+					if _, err := cwhub.DownloadLatest(Item, crowdsecConfig["cscli_dir"], true, crowdsecConfig["data_dir"]); err != nil {
+						log.Fatalf(err.Error())
+					}
+					break
+				}
 			}
 		}
 
-		/*var selection []string
-		prompt := &survey.MultiSelect{
-			Message:  fmt.Sprintf("Install collections from CrowdSec Hub"),
-			Options:  ld.ExistingFiles,
-			PageSize: 10,
-			Default:  ld.ExistingFiles,
-		}
-		survey.AskOne(prompt, &selection, survey.WithPageSize(10))
-		*/
 	case "install_blockers":
 	case "uninstall_crowdsec":
 	default:
