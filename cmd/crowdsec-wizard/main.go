@@ -20,14 +20,14 @@ var (
 	menuAction = map[string]string{
 		"install_crowdsec":      "\n  (1) Install CrowdSec\n",
 		"upgrade_crowdsec":      "(2) Upgrade CrowdSec\n",
-		"detect_and_write_logs": "(3) Detect Logs and generate acquisition configuration\n",
+		"detect_and_write_logs": "(3) Detect Logs and install collections\n",
 		"install_blockers":      "(4) Install blocker(s)\n",
 		"uninstall_crowdsec":    "(5) Uninstall CrowdSec\n",
 	}
 
 	crowdsecConfig = map[string]string{
 		"data_dir":  "/var/lib/crowdsec/data",
-		"cscli_dir": "/etc/crowdsec/config/cscli",
+		"cscli_dir": "/etc/crowdsec/config/cscli/hub",
 	}
 )
 
@@ -104,7 +104,6 @@ func main() {
 		}
 
 		var defaultCollections []string
-
 		for _, collection := range sd.collectionsDependency {
 			defaultCollections = append(defaultCollections, collection...)
 		}
@@ -128,6 +127,9 @@ func main() {
 				if collectionName == collectionToInstall {
 					log.Printf("installing collection '%s'", collectionName)
 					if _, err := cwhub.DownloadLatest(Item, crowdsecConfig["cscli_dir"], true, crowdsecConfig["data_dir"]); err != nil {
+						log.Fatalf(err.Error())
+					}
+					if _, err := cwhub.EnableItem(Item, crowdsecConfig["cscli_dir"], crowdsecConfig["data_dir"]); err != nil {
 						log.Fatalf(err.Error())
 					}
 					break

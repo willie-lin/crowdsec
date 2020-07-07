@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/crowdsecurity/crowdwatch/pkg/acquisition"
+	"github.com/crowdsecurity/crowdsec/pkg/acquisition"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
