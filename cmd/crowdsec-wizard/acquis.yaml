@@ -20,3 +20,53 @@ filenames:
 - /var/log/messages
 labels:
   type: syslog
+mode: tail
+filenames:
+- /var/log/syslog
+- /var/log/kern.log
+labels:
+  type: syslog
+mode: tail
+filenames:
+- /var/log/syslog
+- /var/log/kern.log
+labels:
+  type: syslog
+mode: tail
+filenames:
+- /var/log/nginx/access.log
+- /var/log/nginx/error.log
+labels:
+  type: nginx
+---
+mode: tail
+filenames:
+- /var/log/syslog
+- /var/log/kern.log
+labels:
+  type: syslog
+mode: tail
+filenames:
+- /var/log/syslog
+- /var/log/kern.log
+labels:
+  type: syslog
+mode: tail
+filenames:
+- /var/log/nginx/access.log
+- /var/log/nginx/error.log
+labels:
+  type: nginx
+---
+mode: tail
+filenames:
+- /var/log/syslog
+- /var/log/kern.log
+labels:
+  type: syslog
+mode: tail
+filenames:
+- /var/log/syslog
+- /var/log/kern.log
+labels:
+  type: syslog
