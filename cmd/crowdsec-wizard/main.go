@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/crowdsecurity/crowdsec/pkg/cwhub"
@@ -41,6 +42,9 @@ func main() {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
+	cwhub.Cfgdir = filepath.Clean("/etc/crowdsec/config/cscli/")
+	cwhub.Installdir = filepath.Clean("/etc/crowdsec/config/")
+	cwhub.Hubdir = filepath.Clean("/etc/crowdsec/config/cscli/hub")
 
 	menuChoice := make([]string, len(menuAction), len(menuAction))
 	for i := 0; i < len(menuAction); i++ {
@@ -126,10 +130,10 @@ func main() {
 			for collectionName, Item := range cwhub.HubIdx["collections"] {
 				if collectionName == collectionToInstall {
 					log.Printf("installing collection '%s'", collectionName)
-					if _, err := cwhub.DownloadLatest(Item, crowdsecConfig["cscli_dir"], true, crowdsecConfig["data_dir"]); err != nil {
+					if Item, err = cwhub.DownloadLatest(Item, cwhub.Hubdir, true, crowdsecConfig["data_dir"]); err != nil {
 						log.Fatalf(err.Error())
 					}
-					if _, err := cwhub.EnableItem(Item, crowdsecConfig["cscli_dir"], crowdsecConfig["data_dir"]); err != nil {
+					if _, err := cwhub.EnableItem(Item, cwhub.Installdir, crowdsecConfig["data_dir"]); err != nil {
 						log.Fatalf(err.Error())
 					}
 					break
