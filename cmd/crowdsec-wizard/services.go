@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -20,7 +21,8 @@ type serviceFactory struct {
 	HubCollection []string `json:"collections"`
 }
 
-var acquisFilePath = "./acquis.yaml"
+var acquisFilename = "acquis.yaml"
+var acquisFilePath = fmt.Sprintf("./%s", acquisFilename)
 
 func NewServices() (*serviceDetector, error) {
 	sd := &serviceDetector{}
@@ -79,7 +81,7 @@ func (sd *serviceDetector) Detect() error {
 }
 
 func (sd *serviceDetector) GenerateConfig() error {
-	f, err := os.OpenFile(acquisFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(fmt.Sprintf("./%s", acquisFilePath), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}

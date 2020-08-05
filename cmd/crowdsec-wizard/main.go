@@ -174,6 +174,11 @@ func Run() error {
 			return err
 		}
 
+		if err := copyFile(acquisFilePath, fmt.Sprintf("%s/%s", cwhub.Installdir, acquisFilename)); err != nil {
+			return err
+		}
+		log.Printf("'%s' file deployed in '%s'", acquisFilePath, fmt.Sprintf("%s/%s", cwhub.Installdir, acquisFilename))
+
 		if err := cwhub.UpdateHubIdx(); err != nil {
 			return err
 		}
