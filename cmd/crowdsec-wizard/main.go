@@ -11,7 +11,7 @@ import (
 
 var (
 	actionPriority = map[int]string{
-		0: "install_crowdsec",
+		0: "install_crowdsec_from_tgz",
 		1: "upgrade_crowdsec",
 		2: "detect_and_write_logs",
 		3: "install_blockers",
@@ -19,11 +19,11 @@ var (
 	}
 
 	menuAction = map[string]string{
-		"install_crowdsec":      "\n  (1) Install CrowdSec\n",
-		"upgrade_crowdsec":      "(2) Upgrade CrowdSec\n",
-		"detect_and_write_logs": "(3) Detect Logs and install collections\n",
-		"install_blockers":      "(4) Install blocker(s)\n",
-		"uninstall_crowdsec":    "(5) Uninstall CrowdSec\n",
+		"install_crowdsec_from_tgz": "\n  (1) Install CrowdSec (from crowdsec-release.tgz)\n",
+		"upgrade_crowdsec":          "(2) Upgrade CrowdSec\n",
+		"detect_and_write_logs":     "(3) Detect Logs and install collections\n",
+		"install_blockers":          "(4) Install blocker(s)\n",
+		"uninstall_crowdsec":        "(5) Uninstall CrowdSec\n",
 	}
 
 	crowdsecConfig = map[string]string{
