@@ -52,6 +52,21 @@ func NewServices() (*serviceDetector, error) {
 	return sd, nil
 }
 
+func (sd *serviceDetector) NewLog(files []string, fileType string) error {
+
+	if _, ok := sd.logDetector[fileType]; ok {
+		sd.logDetector[fileType].ExistingFiles = append(sd.logDetector[fileType].ExistingFiles, files...)
+	} else {
+		ld := &logDetector{
+			Name:          fileType,
+			ExistingFiles: files,
+		}
+		sd.logDetector[fileType] = ld
+	}
+
+	return nil
+}
+
 func (sd *serviceDetector) Detect() error {
 	for _, ld := range sd.logDetector {
 		err := ld.Detect()
