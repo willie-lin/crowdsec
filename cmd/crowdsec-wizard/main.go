@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/AlecAivazis/survey/v2/terminal"
@@ -66,7 +65,6 @@ func Run() error {
 		},
 	}
 
-	log.Printf("Survey : %+v \n", survey.MultilineQuestionTemplate)
 	survey.MultilineQuestionTemplate = `
 	{{- if .ShowHelp }}{{- color .Config.Icons.Help.Format }}{{ .Config.Icons.Help.Text }} {{ .Help }}{{color "reset"}}{{"\n"}}{{end}}
 	{{- color .Config.Icons.Question.Format }}{{ .Config.Icons.Question.Text }} {{color "reset"}}
@@ -103,129 +101,18 @@ func Run() error {
 		if err != nil {
 			log.Fatalf(err.Error())
 		}
-		err = sd.Detect()
-		if err != nil {
-			log.Fatalf(err.Error())
-		}
-		log.Printf("detected %d services", len(sd.logDetector))
 
-		for service, ld := range sd.logDetector {
-			var selection []string
-			prompt := &survey.MultiSelect{
-				Message:  fmt.Sprintf("Logs files found for service '%s'", service),
-				Options:  ld.ExistingFiles,
-				PageSize: 10,
-				Default:  ld.ExistingFiles,
-			}
-			err := survey.AskOne(prompt, &selection, survey.WithPageSize(10))
-			if err == terminal.InterruptErr {
-				log.Printf("returning to main menu")
-				return nil
-			} else if err != nil {
-				return err
-			}
-			ld.ExistingFiles = selection
-		}
-
-		for {
-			addCustomLogs := ""
-
-			prompt := &survey.Input{
-				Message: "Do you want to add other logs file or folder (glob is supported) ? (Y/n)",
-			}
-			err := survey.AskOne(prompt, &addCustomLogs)
-			if err == terminal.InterruptErr {
-				break
-			} else if err != nil {
-				return err
-			}
-			if strings.ToUpper(addCustomLogs) == "N" || strings.ToUpper(addCustomLogs) == "NO" {
-				break
-			}
-			logFile := ""
-			logType := ""
-
-			prompt = &survey.Input{
-				Message: "Log file type : ",
-			}
-			err = survey.AskOne(prompt, &logType)
-			if err == terminal.InterruptErr {
-				break
-			} else if err != nil {
-				return err
-			}
-
-			multiLinePrompt := &survey.Multiline{
-				Message: "Path to your logs file (one by line) :",
-			}
-			err = survey.AskOne(multiLinePrompt, &logFile)
-			if err == terminal.InterruptErr {
-				break
-			} else if err != nil {
-				return err
-			}
-			logFiles := strings.Fields(logFile)
-
-			sd.NewLog(logFiles, logType)
-		}
-
-		err = sd.GenerateConfig()
-		if err != nil {
-			return err
+		if err := sd.Run(); err != nil {
+			log.Fatalf("error while detecting logs : %s", err)
 		}
 
 		if err := copyFile(acquisFilePath, fmt.Sprintf("%s/%s", cwhub.Installdir, acquisFilename)); err != nil {
-			return err
+			return fmt.Errorf("error while copying '%s' to '%s': %s", acquisFilePath, fmt.Sprintf("%s/%s", cwhub.Installdir, acquisFilename), err)
 		}
 		log.Printf("'%s' file deployed in '%s'", acquisFilePath, fmt.Sprintf("%s/%s", cwhub.Installdir, acquisFilename))
-
-		if err := cwhub.UpdateHubIdx(); err != nil {
-			return err
+		if err := sd.installDependency(); err != nil {
+			log.Fatalf("unable to install collection dependency : %s", err)
 		}
-
-		if err := cwhub.GetHubIdx(); err != nil {
-			return err
-		}
-
-		var defaultCollections []string
-		for _, collection := range sd.collectionsDependency {
-			defaultCollections = append(defaultCollections, collection...)
-		}
-
-		var allCollection []string
-		for collectionName := range cwhub.HubIdx["collections"] {
-			allCollection = append(allCollection, collectionName)
-		}
-
-		var selection []string
-		prompt := &survey.MultiSelect{
-			Message:  fmt.Sprintf("Install collections from CrowdSec Hub"),
-			Options:  allCollection,
-			PageSize: 10,
-			Default:  defaultCollections,
-		}
-		err = survey.AskOne(prompt, &selection, survey.WithPageSize(10))
-		if err == terminal.InterruptErr {
-			log.Printf("returning to main menu")
-			return nil
-		} else if err != nil {
-			return err
-		}
-		for _, collectionToInstall := range selection {
-			for collectionName, Item := range cwhub.HubIdx["collections"] {
-				if collectionName == collectionToInstall {
-					log.Printf("installing collection '%s'", collectionName)
-					if Item, err = cwhub.DownloadLatest(Item, cwhub.Hubdir, true, crowdsecConfig["data_dir"]); err != nil {
-						return err
-					}
-					if _, err := cwhub.EnableItem(Item, cwhub.Installdir, crowdsecConfig["data_dir"]); err != nil {
-						return err
-					}
-					break
-				}
-			}
-		}
-
 	case "install_blockers":
 	case "uninstall_crowdsec":
 	case "exit_wizard":

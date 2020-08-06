@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/crowdsecurity/crowdsec/pkg/acquisition"
+	"github.com/crowdsecurity/crowdsec/pkg/cwhub"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -54,7 +58,7 @@ func NewServices() (*serviceDetector, error) {
 	return sd, nil
 }
 
-func (sd *serviceDetector) NewLog(files []string, fileType string) error {
+func (sd *serviceDetector) AddLogsFile(files []string, fileType string) error {
 
 	if _, ok := sd.logDetector[fileType]; ok {
 		sd.logDetector[fileType].ExistingFiles = append(sd.logDetector[fileType].ExistingFiles, files...)
@@ -113,5 +117,133 @@ func (sd *serviceDetector) GenerateConfig() error {
 
 	}
 	log.Printf("'%s' file generated", acquisFilePath)
+	return nil
+}
+
+func (sd *serviceDetector) Run() error {
+	err := sd.Detect()
+	if err != nil {
+		log.Fatalf(err.Error())
+	}
+	log.Printf("detected %d services", len(sd.logDetector))
+
+	for service, ld := range sd.logDetector {
+		var selection []string
+		prompt := &survey.MultiSelect{
+			Message:  fmt.Sprintf("Logs files found for service '%s'", service),
+			Options:  ld.ExistingFiles,
+			PageSize: 10,
+			Default:  ld.ExistingFiles,
+		}
+		err := survey.AskOne(prompt, &selection, survey.WithPageSize(10))
+		if err == terminal.InterruptErr {
+			log.Printf("returning to main menu")
+			return nil
+		} else if err != nil {
+			return err
+		}
+		ld.ExistingFiles = selection
+	}
+
+	for {
+		addCustomLogs := ""
+
+		prompt := &survey.Input{
+			Message: "Do you want to add other logs file or folder (glob is supported) ? (Y/n)",
+		}
+		err := survey.AskOne(prompt, &addCustomLogs)
+		if err == terminal.InterruptErr {
+			break
+		} else if err != nil {
+			return err
+		}
+		if strings.ToUpper(addCustomLogs) == "N" || strings.ToUpper(addCustomLogs) == "NO" {
+			break
+		}
+		logFile := ""
+		logType := ""
+
+		prompt = &survey.Input{
+			Message: "Log file type : ",
+		}
+		err = survey.AskOne(prompt, &logType)
+		if err == terminal.InterruptErr {
+			break
+		} else if err != nil {
+			return err
+		}
+
+		multiLinePrompt := &survey.Multiline{
+			Message: "Path to your logs file (one by line) :",
+		}
+		err = survey.AskOne(multiLinePrompt, &logFile)
+		if err == terminal.InterruptErr {
+			break
+		} else if err != nil {
+			return err
+		}
+		logFiles := strings.Fields(logFile)
+
+		sd.AddLogsFile(logFiles, logType)
+	}
+
+	err = sd.GenerateConfig()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (sd *serviceDetector) installDependency() error {
+	if err := cwhub.UpdateHubIdx(); err != nil {
+		return err
+	}
+
+	if err := cwhub.GetHubIdx(); err != nil {
+		return err
+	}
+
+	var defaultCollections []string
+	for _, collection := range sd.collectionsDependency {
+		defaultCollections = append(defaultCollections, collection...)
+	}
+
+	var allCollection []string
+	for collectionName := range cwhub.HubIdx["collections"] {
+		if strInSlice(collectionName, defaultCollections) {
+			allCollection = append([]string{collectionName}, allCollection...) // If the collection is in default, we want to add it at the begining
+		} else {
+			allCollection = append(allCollection, collectionName)
+		}
+	}
+
+	var selection []string
+	prompt := &survey.MultiSelect{
+		Message:  fmt.Sprintf("Install collections from CrowdSec Hub"),
+		Options:  allCollection,
+		PageSize: 10,
+		Default:  defaultCollections,
+	}
+	err := survey.AskOne(prompt, &selection, survey.WithPageSize(10))
+	if err == terminal.InterruptErr {
+		log.Printf("returning to main menu")
+		return nil
+	} else if err != nil {
+		return err
+	}
+	for _, collectionToInstall := range selection {
+		for collectionName, Item := range cwhub.HubIdx["collections"] {
+			if collectionName == collectionToInstall {
+				log.Printf("installing collection '%s'", collectionName)
+				if Item, err = cwhub.DownloadLatest(Item, cwhub.Hubdir, true, crowdsecConfig["data_dir"]); err != nil {
+					return err
+				}
+				if _, err := cwhub.EnableItem(Item, cwhub.Installdir, crowdsecConfig["data_dir"]); err != nil {
+					return err
+				}
+				break
+			}
+		}
+	}
 	return nil
 }
