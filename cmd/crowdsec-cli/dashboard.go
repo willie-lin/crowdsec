@@ -12,20 +12,21 @@ import (
 )
 
 var (
-	metabaseUser         = "crowdsec@crowdsec.net"
-	metabasePassword     string
-	metabaseDbPath       string
-	metabaseConfigPath   string
-	metabaseConfigFolder = "metabase/"
-	metabaseConfigFile   = "metabase.yaml"
-	metabaseImage        = "metabase/metabase"
-	/**/
-	metabaseListenAddress = "127.0.0.1"
-	metabaseListenPort    = "3000"
-	metabaseContainerID   = "/crowdsec-metabase"
+	metabaseUser       = "crowdsec@crowdsec.net"
+	metabasePassword   string
+	metabaseDbPath     string
+	metabaseConfigPath string
 
 	dockerGatewayIPAddr = "172.17.0.1"
 	/*informations needed to setup a random password on user's behalf*/
+
+	dashboardconfigFile      = "dashboard.yaml"
+	dashboardUser            = "crowdsec@crowdsec.net"
+	dashboardDefaultUser     = "crowdsec@crowdsec.net"
+	dashboardDefaultPassword = "!!Cr0wdS3c_M3t4b4s3??"
+	dashboardPassword        string
+	dockerGatewayIPAddr      = "172.17.0.1"
+	dashboardContainerName   = "/crowdsec-%s"
 )
 
 func NewDashboardCmd() *cobra.Command {
