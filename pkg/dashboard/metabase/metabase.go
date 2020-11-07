@@ -23,19 +23,19 @@ import (
 type Metabase struct {
 	Config        *Config
 	Client        *APIClient
-	Container     *Container
+	Container     *container.Container
 	Database      *Database
 	InternalDBURL string
 }
 
 type Config struct {
-	Database   *csconfig.DatabaseCfg `yaml:"database"`
-	ListenAddr string                `yaml:"listen_addr"`
-	ListenPort string                `yaml:"listen_port"`
-	ListenURL  string                `yaml:"listen_url"`
-	Username   string                `yaml:"username"`
-	Password   string                `yaml:"password"`
-	Options    string                `yaml:"options"`
+	Database     *csconfig.DatabaseCfg `yaml:"database"`
+	ListenAddr   string                `yaml:"listen_addr"`
+	ListenPort   int                   `yaml:"listen_port"`
+	ListenURL    string                `yaml:"listen_url"`
+	Username     string                `yaml:"username"`
+	Password     string                `yaml:"password"`
+	SharedFolder string                `yaml:"shared_folder"`
 }
 
 var (
@@ -43,6 +43,9 @@ var (
 	containerImage        = "metabase/metabase:v0.37.0.2"
 	containerSharedFolder = "/metabase-data"
 	ConfigFolder          = "metabase/"
+
+	DefaultUser     = "crowdsec@crowdsec.net"
+	DefaultPassword = "!!Cr0wdS3c_M3t4b4s3??"
 	/**/
 	ContainerName = "/crowdsec-metabase"
 	SQLiteDBURL   = "https://crowdsec-statics-assets.s3-eu-west-1.amazonaws.com/metabase_sqlite.zip"
@@ -50,17 +53,11 @@ var (
 
 func (m *Metabase) Init() error {
 	var err error
-	var DBConnectionURI string
 	var remoteDBAddr string
 
 	switch m.Config.Database.Type {
-	case "mysql":
-		return fmt.Errorf("'mysql' is not supported yet for cscli dashboard")
-		//DBConnectionURI = fmt.Sprintf("MB_DB_CONNECTION_URI=mysql://%s:%d/%s?user=%s&password=%s&allowPublicKeyRetrieval=true", remoteDBAddr, m.Config.Database.Port, m.Config.Database.DbName, m.Config.Database.User, m.Config.Database.Password)
 	case "sqlite":
-		m.InternalDBURL = metabaseSQLiteDBURL
-	case "postgresql", "postgres", "pgsql":
-		return fmt.Errorf("'postgresql' is not supported yet by cscli dashboard")
+		m.InternalDBURL = SQLiteDBURL
 	default:
 		return fmt.Errorf("database '%s' not supported", m.Config.Database.Type)
 	}
@@ -71,7 +68,22 @@ func (m *Metabase) Init() error {
 	}
 	m.Database, err = NewDatabase(m.Config.Database, m.Client, remoteDBAddr)
 
-	m.Container, err = NewContainer(m.Config.ListenAddr, m.Config.ListenPort, containerName, metabaseImage, m.Config.Options)
+	options := &container.Options{
+		Shares: []*container.Share{
+			{
+				SourceDir: m.Config.SharedFolder,
+				TargetDir: containerSharedFolder,
+			},
+		},
+		Env: []string{
+			fmt.Sprintf("MB_DB_FILE=%s/metabase.db", containerSharedFolder),
+		},
+		ListenAddress: m.Config.ListenAddr,
+		ListenPort:    m.Config.ListenPort,
+		BindPort:      3000,
+	}
+
+	m.Container, err = container.NewContainer(containerName, containerImage, options)
 	if err != nil {
 		return errors.Wrap(err, "container init")
 	}
@@ -124,16 +136,16 @@ func (m *Metabase) LoadConfig(configPath string) error {
 
 }
 
-func SetupMetabase(dbConfig *csconfig.DatabaseCfg, listenAddr string, listenPort string, username string, password string, options container.Options) (*Metabase, error) {
+func SetupMetabase(dbConfig *csconfig.DatabaseCfg, listenAddr string, listenPort int, username string, password string, sharedFolder string) (*Metabase, error) {
 	metabase := &Metabase{
 		Config: &Config{
-			Database:   dbConfig,
-			ListenAddr: listenAddr,
-			ListenPort: listenPort,
-			Username:   username,
-			Password:   password,
-			ListenURL:  fmt.Sprintf("http://%s:%s", listenAddr, listenPort),
-			Options:    options,
+			Database:     dbConfig,
+			ListenAddr:   listenAddr,
+			ListenPort:   listenPort,
+			Username:     username,
+			Password:     password,
+			ListenURL:    fmt.Sprintf("http://%s:%s", listenAddr, listenPort),
+			SharedFolder: sharedFolder,
 		},
 	}
 	if err := metabase.Init(); err != nil {
@@ -175,7 +187,7 @@ func SetupMetabase(dbConfig *csconfig.DatabaseCfg, listenAddr string, listenPort
 func (m *Metabase) WaitAlive() error {
 	var err error
 	for {
-		if err = m.Login(metabaseDefaultUser, metabaseDefaultPassword); err == nil {
+		if err = m.Login(DefaultUser, DefaultPassword); err == nil {
 			break
 		}
 		fmt.Printf(".")
@@ -264,7 +276,7 @@ func (m *Metabase) ResetUsername(username string) error {
 }
 
 func (m *Metabase) ResetCredentials() error {
-	if err := m.ResetPassword(metabaseDefaultPassword, m.Config.Password); err != nil {
+	if err := m.ResetPassword(DefaultPassword, m.Config.Password); err != nil {
 		return err
 	}
 
@@ -285,7 +297,7 @@ func (m *Metabase) DumpConfig(path string) error {
 
 func (m *Metabase) DownloadDatabase(force bool) error {
 
-	metabaseDBSubpath := path.Join(m.Config.DBPath, "metabase.db")
+	metabaseDBSubpath := path.Join(m.Config.SharedFolder, "metabase.db")
 	_, err := os.Stat(metabaseDBSubpath)
 	if err == nil && !force {
 		log.Printf("%s exists, skip.", metabaseDBSubpath)
@@ -331,7 +343,7 @@ func (m *Metabase) ExtractDatabase(buf *bytes.Reader) error {
 		if strings.Contains(f.Name, "..") {
 			return fmt.Errorf("invalid path '%s' in archive", f.Name)
 		}
-		tfname := fmt.Sprintf("%s/%s", m.Config.DBPath, f.Name)
+		tfname := fmt.Sprintf("%s/%s", m.Config.SharedFolder, f.Name)
 		log.Tracef("%s -> %d", f.Name, f.UncompressedSize64)
 		if f.UncompressedSize64 == 0 {
 			continue
@@ -357,5 +369,5 @@ func (m *Metabase) ExtractDatabase(buf *bytes.Reader) error {
 }
 
 func (m *Metabase) RemoveDatabase() error {
-	return os.RemoveAll(path.Join(m.Config.DBPath, "metabase.db"))
+	return os.RemoveAll(path.Join(m.Config.SharedFolder, "metabase.db"))
 }

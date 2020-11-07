@@ -5,12 +5,13 @@ import (
 	"io/ioutil"
 
 	"github.com/crowdsecurity/crowdsec/pkg/csconfig"
+	"github.com/crowdsecurity/crowdsec/pkg/dashboard/container"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
 )
 
 type Grafana struct {
-	Container *Container
+	Container *container.Container
 	Config    *Config
 }
 
@@ -18,7 +19,7 @@ var (
 	metabaseDefaultUser     = "crowdsec@crowdsec.net"
 	metabaseDefaultPassword = "!!Cr0wdS3c_M3t4b4s3??"
 	containerName           = "/crowdsec-grafana"
-	metabaseImage           = "grafana/grafana"
+	containerImage          = "grafana/grafana"
 
 	metabaseSQLiteDBURL = "https://crowdsec-statics-assets.s3-eu-west-1.amazonaws.com/grafana_dashboard.zip"
 )
@@ -26,7 +27,7 @@ var (
 type Config struct {
 	Database   *csconfig.DatabaseCfg `yaml:"database"`
 	ListenAddr string                `yaml:"listen_addr"`
-	ListenPort string                `yaml:"listen_port"`
+	ListenPort int                   `yaml:"listen_port"`
 	ListenURL  string                `yaml:"listen_url"`
 	Username   string                `yaml:"username"`
 	Password   string                `yaml:"password"`
@@ -78,13 +79,24 @@ func (g *Grafana) LoadConfig(configPath string) error {
 
 func (g *Grafana) Init() error {
 	var err error
-	var DBConnectionURI string
-	var remoteDBAddr string
 
-	g.Container, err = NewContainer(g.Config.ListenAddr, g.Config.ListenPort, containerName, metabaseImage)
+	switch g.Config.Database.Type {
+	case "mysql", "postgresql", "postgres":
+	default:
+		return fmt.Errorf("database '%s' not supported", g.Config.Database.Type)
+	}
+
+	options := &container.Options{
+		Shares:        []*container.Share{},
+		Env:           []string{},
+		ListenAddress: g.Config.ListenAddr,
+		ListenPort:    g.Config.ListenPort,
+		BindPort:      3000,
+	}
+
+	g.Container, err = container.NewContainer(containerName, containerImage, options)
 	if err != nil {
 		return errors.Wrap(err, "container init")
 	}
-
 	return nil
 }

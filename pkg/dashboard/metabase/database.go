@@ -47,18 +47,14 @@ func NewDatabase(config *csconfig.DatabaseCfg, client *APIClient, remoteDBAddr s
 	database := Database{}
 
 	switch config.Type {
-	case "mysql":
-		return nil, fmt.Errorf("database '%s' is not supported yet", config.Type)
 	case "sqlite":
-		database.DBUrl = metabaseSQLiteDBURL
+		database.DBUrl = SQLiteDBURL
 		localFolder := filepath.Dir(config.DbPath)
 		// replace /var/lib/crowdsec/data/ with /metabase-data/
 		dbPath := strings.Replace(config.DbPath, localFolder, containerSharedFolder, 1)
 		details = &Details{
 			Db: dbPath,
 		}
-	case "postgresql", "postgres", "pgsql":
-		return nil, fmt.Errorf("database '%s' is not supported yet", config.Type)
 	default:
 		return nil, fmt.Errorf("database '%s' not supported", config.Type)
 	}

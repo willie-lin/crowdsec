@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -30,22 +31,21 @@ type Share struct {
 }
 
 type Options struct {
-	Shares   []*Share
-	Env      []string
-	BindPort int*
+	Shares        []*Share
+	Env           []string
+	BindPort      int
 	ListenAddress string
-	ListenPort string
+	ListenPort    int
 }
 
-func NewContainer(name string, image string, options Options) (*Container, error) {
+func NewContainer(name string, image string, options *Options) (*Container, error) {
 	var err error
 	container := &Container{
-		Image:      image,
-		Name:       name,
-		CLI:        cli,
-		Options:    &options,
+		Image:   image,
+		Name:    name,
+		Options: options,
 	}
-	container.cli, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	container.CLI, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client : %s", err)
 	}
@@ -88,21 +88,22 @@ func (c *Container) Create() error {
 	}
 	fmt.Print("\n")
 
-
-	mounts := []mount.Mount
-	for _, share := c.Options.Shares {
-		mounts := append(mounts, mount.Mount{Type: mount.TypeBind, Source: share.SourceDir, Target: share.TargetDir})
+	mounts := []mount.Mount{}
+	for _, share := range c.Options.Shares {
+		mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: share.SourceDir, Target: share.TargetDir})
 	}
+	var bindPort interface{}
+	bindPort = fmt.Sprintf("%d/tcp", c.Options.BindPort)
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
-			fmt.Sprintf("%s/tcp", c.Options.BindPort) : []nat.PortBinding{
+			bindPort.(nat.Port): []nat.PortBinding{
 				{
 					HostIP:   c.Options.ListenAddress,
-					HostPort: c.Options.ListenPort,
+					HostPort: strconv.Itoa(c.Options.ListenPort),
 				},
 			},
 		},
-		Mounts: mounts
+		Mounts: mounts,
 	}
 
 	/*env := []string{
