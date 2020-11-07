@@ -51,35 +51,35 @@ var (
 	SQLiteDBURL   = "https://crowdsec-statics-assets.s3-eu-west-1.amazonaws.com/metabase_sqlite.zip"
 )
 
-func (m *Metabase) Init() error {
+func (m *Metabase) Init(config *Config) error {
 	var err error
 	var remoteDBAddr string
 
-	switch m.Config.Database.Type {
+	switch config.Database.Type {
 	case "sqlite":
 		m.InternalDBURL = SQLiteDBURL
 	default:
-		return fmt.Errorf("database '%s' not supported", m.Config.Database.Type)
+		return fmt.Errorf("database '%s' not supported", config.Database.Type)
 	}
 
-	m.Client, err = NewAPIClient(m.Config.ListenURL)
+	m.Client, err = NewAPIClient(config.ListenURL)
 	if err != nil {
 		return err
 	}
-	m.Database, err = NewDatabase(m.Config.Database, m.Client, remoteDBAddr)
+	m.Database, err = NewDatabase(config.Database, m.Client, remoteDBAddr)
 
 	options := &container.Options{
 		Shares: []*container.Share{
 			{
-				SourceDir: m.Config.SharedFolder,
+				SourceDir: config.SharedFolder,
 				TargetDir: containerSharedFolder,
 			},
 		},
 		Env: []string{
 			fmt.Sprintf("MB_DB_FILE=%s/metabase.db", containerSharedFolder),
 		},
-		ListenAddress: m.Config.ListenAddr,
-		ListenPort:    m.Config.ListenPort,
+		ListenAddress: config.ListenAddr,
+		ListenPort:    config.ListenPort,
 		BindPort:      3000,
 	}
 
@@ -87,101 +87,74 @@ func (m *Metabase) Init() error {
 	if err != nil {
 		return errors.Wrap(err, "container init")
 	}
+	m.Config = config
 
 	return nil
 }
 
-func NewMetabase(configPath string) (*Metabase, error) {
-	m := &Metabase{}
-	if err := m.LoadConfig(configPath); err != nil {
-		return m, err
-	}
-	if err := m.Init(); err != nil {
-		return m, err
-	}
-	return m, nil
+func NewMetabase() *Metabase {
+	return &Metabase{}
 }
 
-func (m *Metabase) LoadConfig(configPath string) error {
+func LoadConfigurationFile(configPath string) (*Config, error) {
 	yamlFile, err := ioutil.ReadFile(configPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	config := &Config{}
 
 	err = yaml.Unmarshal(yamlFile, config)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if config.Username == "" {
-		return fmt.Errorf("'username' not found in configuration file '%s'", configPath)
+		return nil, fmt.Errorf("'username' not found in configuration file '%s'", configPath)
 	}
 
 	if config.Password == "" {
-		return fmt.Errorf("'password' not found in configuration file '%s'", configPath)
+		return nil, fmt.Errorf("'password' not found in configuration file '%s'", configPath)
 	}
 
 	if config.ListenURL == "" {
-		return fmt.Errorf("'listen_url' not found in configuration file '%s'", configPath)
+		return nil, fmt.Errorf("'listen_url' not found in configuration file '%s'", configPath)
 	}
 
-	m.Config = config
-
-	if err := m.Init(); err != nil {
-		return err
-	}
-
-	return nil
+	return config, nil
 
 }
 
-func SetupMetabase(dbConfig *csconfig.DatabaseCfg, listenAddr string, listenPort int, username string, password string, sharedFolder string) (*Metabase, error) {
-	metabase := &Metabase{
-		Config: &Config{
-			Database:     dbConfig,
-			ListenAddr:   listenAddr,
-			ListenPort:   listenPort,
-			Username:     username,
-			Password:     password,
-			ListenURL:    fmt.Sprintf("http://%s:%s", listenAddr, listenPort),
-			SharedFolder: sharedFolder,
-		},
-	}
-	if err := metabase.Init(); err != nil {
-		return nil, errors.Wrap(err, "metabase setup init")
+func (m *Metabase) Setup() error {
+	if err := m.DownloadDatabase(false); err != nil {
+		return errors.Wrap(err, "metabase db download")
 	}
 
-	if err := metabase.DownloadDatabase(false); err != nil {
-		return nil, errors.Wrap(err, "metabase db download")
+	if err := m.Container.Create(); err != nil {
+		return errors.Wrap(err, "container create")
 	}
 
-	if err := metabase.Container.Create(); err != nil {
-		return nil, errors.Wrap(err, "container create")
-	}
-
-	if err := metabase.Container.Start(); err != nil {
-		return nil, errors.Wrap(err, "container start")
+	if err := m.Container.Start(); err != nil {
+		return errors.Wrap(err, "container start")
 	}
 
 	log.Infof("waiting for metabase to be up (can take up to a minute)")
-	if err := metabase.WaitAlive(); err != nil {
-		return nil, errors.Wrap(err, "wait alive")
+	if err := m.WaitAlive(); err != nil {
+		return errors.Wrap(err, "wait alive")
 	}
 
-	if err := metabase.Database.Update(); err != nil {
-		return nil, errors.Wrap(err, "update database")
+	if err := m.Database.Update(); err != nil {
+		return errors.Wrap(err, "update database")
 	}
 
-	if err := metabase.Scan(); err != nil {
-		return nil, errors.Wrap(err, "db scan")
+	if err := m.Scan(); err != nil {
+		return errors.Wrap(err, "db scan")
 	}
 
-	if err := metabase.ResetCredentials(); err != nil {
-		return nil, errors.Wrap(err, "reset creds")
+	if err := m.ResetCredentials(); err != nil {
+		return errors.Wrap(err, "reset creds")
 	}
 
-	return metabase, nil
+	return nil
 }
 
 func (m *Metabase) WaitAlive() error {

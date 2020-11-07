@@ -2,31 +2,27 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/crowdsecurity/crowdsec/pkg/metabase"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/crowdsecurity/crowdsec/pkg/dashboard"
 	"github.com/spf13/cobra"
 )
 
 var (
-	metabaseUser       = "crowdsec@crowdsec.net"
-	metabasePassword   string
-	metabaseDbPath     string
-	metabaseConfigPath string
-
-	dockerGatewayIPAddr = "172.17.0.1"
+	Dashboard *dashboard.Dashboard
 	/*informations needed to setup a random password on user's behalf*/
 
 	dashboardconfigFile      = "dashboard.yaml"
-	dashboardUser            = "crowdsec@crowdsec.net"
 	dashboardDefaultUser     = "crowdsec@crowdsec.net"
 	dashboardDefaultPassword = "!!Cr0wdS3c_M3t4b4s3??"
-	dashboardPassword        string
 	dockerGatewayIPAddr      = "172.17.0.1"
-	dashboardContainerName   = "/crowdsec-%s"
+
+	dashboardUser       string
+	dashboardPassword   string
+	dashboardListenAddr string
+	dashboardListenPort int
 )
 
 func NewDashboardCmd() *cobra.Command {
@@ -43,11 +39,12 @@ cscli dashboard stop
 cscli dashboard remove
 `,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			metabaseConfigFolderPath := filepath.Join(csConfig.ConfigPaths.ConfigDir, metabaseConfigFolder)
+			/*metabaseConfigFolderPath := filepath.Join(csConfig.ConfigPaths.ConfigDir, metabaseConfigFolder)
 			metabaseConfigPath = filepath.Join(metabaseConfigFolderPath, metabaseConfigFile)
 			if err := os.MkdirAll(metabaseConfigFolderPath, os.ModePerm); err != nil {
 				log.Fatalf(err.Error())
-			}
+			}*/
+			Dashboard = dashboard.NewDashboard()
 		},
 	}
 
@@ -63,7 +60,29 @@ cscli dashboard setup --listen 0.0.0.0
 cscli dashboard setup -l 0.0.0.0 -p 443 --password <password>
  `,
 		Run: func(cmd *cobra.Command, args []string) {
-			if metabaseDbPath == "" {
+			if dashboardPassword == "" {
+				dashboardPassword = generatePassword(16)
+			}
+			if dashboardUser == "" {
+				dashboardUser = dashboardDefaultUser
+			}
+			config := &dashboard.Config{
+				Database:   csConfig.DbConfig,
+				ListenAddr: dashboardListenAddr,
+				ListenPort: dashboardListenPort,
+				ListenURL:  fmt.Sprintf("http://%s:%d", dashboardListenAddr, dashboardListenPort),
+				Username:   dashboardUser,
+				Password:   dashboardPassword,
+				Options: &dashboard.Options{
+					ShareFolder: csConfig.ConfigPaths.DataDir,
+					DockerIPGW:  dockerGatewayIPAddr,
+				},
+			}
+			if err := dashboard.Init(config); err != nil {
+				log.Fatalf("dashboard init: %s", err)
+			}
+
+			/*if metabaseDbPath == "" {
 				metabaseDbPath = csConfig.ConfigPaths.DataDir
 			}
 
@@ -84,14 +103,15 @@ cscli dashboard setup -l 0.0.0.0 -p 443 --password <password>
 			fmt.Printf("\tURL       : '%s'\n", mb.Config.ListenURL)
 			fmt.Printf("\tusername  : '%s'\n", mb.Config.Username)
 			fmt.Printf("\tpassword  : '%s'\n", mb.Config.Password)
+			*/
 		},
 	}
 	cmdDashSetup.Flags().BoolVarP(&force, "force", "f", false, "Force setup : override existing files.")
-	cmdDashSetup.Flags().StringVarP(&metabaseDbPath, "dir", "d", "", "Shared directory with metabase container.")
-	cmdDashSetup.Flags().StringVarP(&metabaseListenAddress, "listen", "l", metabaseListenAddress, "Listen address of container")
-	cmdDashSetup.Flags().StringVarP(&metabaseListenPort, "port", "p", metabaseListenPort, "Listen port of container")
-	//cmdDashSetup.Flags().StringVarP(&metabaseUser, "user", "u", "crowdsec@crowdsec.net", "metabase user")
-	cmdDashSetup.Flags().StringVar(&metabasePassword, "password", "", "metabase password")
+	//cmdDashSetup.Flags().StringVarP(&metabaseDbPath, "dir", "d", "", "Shared directory with metabase container.")
+	cmdDashSetup.Flags().StringVarP(&dashboardListenAddr, "listen", "l", dashboardListenAddr, "Listen address of container")
+	cmdDashSetup.Flags().IntVarP(&dashboardListenPort, "port", "p", dashboardListenPort, "Listen port of container")
+	cmdDashSetup.Flags().StringVarP(&dashboardUser, "user", "u", "", "metabase user")
+	cmdDashSetup.Flags().StringVar(&dashboardPassword, "password", "", "metabase password")
 
 	cmdDashboard.AddCommand(cmdDashSetup)
 
@@ -101,7 +121,7 @@ cscli dashboard setup -l 0.0.0.0 -p 443 --password <password>
 		Long:  `Stats the metabase container using docker.`,
 		Args:  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			mb, err := metabase.NewMetabase(metabaseConfigPath)
+			/*mb, err := metabase.NewMetabase(metabaseConfigPath)
 			if err != nil {
 				log.Fatalf(err.Error())
 			}
@@ -110,6 +130,7 @@ cscli dashboard setup -l 0.0.0.0 -p 443 --password <password>
 			}
 			log.Infof("Started metabase")
 			log.Infof("url : http://%s:%s", metabaseListenAddress, metabaseListenPort)
+			*/
 		},
 	}
 	cmdDashboard.AddCommand(cmdDashStart)
@@ -120,13 +141,13 @@ cscli dashboard setup -l 0.0.0.0 -p 443 --password <password>
 		Long:  `Stops the metabase container using docker.`,
 		Args:  cobra.ExactArgs(0),
 		Run: func(cmd *cobra.Command, args []string) {
-			mb, err := metabase.NewMetabase(metabaseConfigPath)
+			/*mb, err := metabase.NewMetabase(metabaseConfigPath)
 			if err != nil {
 				log.Fatalf(err.Error())
 			}
 			if err := mb.Container.Stop(); err != nil {
 				log.Fatalf("Failed to start metabase container : %s", err)
-			}
+			}*/
 		},
 	}
 	cmdDashboard.AddCommand(cmdDashStop)
@@ -147,7 +168,7 @@ cscli dashboard remove --force
 				Default: true,
 			}
 			survey.AskOne(prompt, &answer)
-			if answer {
+			/*if answer {
 				mb, err := metabase.NewMetabase(metabaseConfigPath)
 				if err != nil {
 					log.Fatalf(err.Error())
@@ -169,6 +190,7 @@ cscli dashboard remove --force
 					}
 				}
 			}
+			*/
 		},
 	}
 	cmdDashRemove.Flags().BoolVarP(&force, "force", "f", false, "Force remove : stop the container if running and remove.")

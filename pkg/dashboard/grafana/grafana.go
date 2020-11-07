@@ -41,6 +41,7 @@ func NewGrafana(configPath string) (*Grafana, error) {
 	if err := g.Init(); err != nil {
 		return g, err
 	}
+	return g, nil
 }
 
 func (g *Grafana) LoadConfig(configPath string) error {
