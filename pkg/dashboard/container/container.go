@@ -92,11 +92,13 @@ func (c *Container) Create() error {
 	for _, share := range c.Options.Shares {
 		mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: share.SourceDir, Target: share.TargetDir})
 	}
-	var bindPort interface{}
-	bindPort = fmt.Sprintf("%d/tcp", c.Options.BindPort)
+	bindPort, err := nat.NewPort("tcp", strconv.Itoa(c.Options.BindPort))
+	if err != nil {
+		return fmt.Errorf("parse bind port: %s", err)
+	}
 	hostConfig := &container.HostConfig{
 		PortBindings: nat.PortMap{
-			bindPort.(nat.Port): []nat.PortBinding{
+			bindPort: []nat.PortBinding{
 				{
 					HostIP:   c.Options.ListenAddress,
 					HostPort: strconv.Itoa(c.Options.ListenPort),

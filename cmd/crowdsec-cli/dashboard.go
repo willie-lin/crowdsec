@@ -21,8 +21,8 @@ var (
 
 	dashboardUser       string
 	dashboardPassword   string
-	dashboardListenAddr string
-	dashboardListenPort int
+	dashboardListenAddr = "127.0.0.1"
+	dashboardListenPort = 8080
 )
 
 func NewDashboardCmd() *cobra.Command {
@@ -39,11 +39,6 @@ cscli dashboard stop
 cscli dashboard remove
 `,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			/*metabaseConfigFolderPath := filepath.Join(csConfig.ConfigPaths.ConfigDir, metabaseConfigFolder)
-			metabaseConfigPath = filepath.Join(metabaseConfigFolderPath, metabaseConfigFile)
-			if err := os.MkdirAll(metabaseConfigFolderPath, os.ModePerm); err != nil {
-				log.Fatalf(err.Error())
-			}*/
 			Dashboard = dashboard.NewDashboard()
 		},
 	}
@@ -77,11 +72,14 @@ cscli dashboard setup -l 0.0.0.0 -p 443 --password <password>
 					ShareFolder: csConfig.ConfigPaths.DataDir,
 					DockerIPGW:  dockerGatewayIPAddr,
 				},
+				DashboardConfigFolder: csConfig.ConfigPaths.ConfigDir,
 			}
-			if err := dashboard.Init(config); err != nil {
+			if err := Dashboard.Init(config); err != nil {
 				log.Fatalf("dashboard init: %s", err)
 			}
-
+			if err := Dashboard.Setup(); err != nil {
+				log.Fatalf("dashboard setup: %s", err)
+			}
 			/*if metabaseDbPath == "" {
 				metabaseDbPath = csConfig.ConfigPaths.DataDir
 			}
